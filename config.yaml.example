@@ -1,0 +1,82 @@
+# InnoDB B+Tree 性能测试框架 - 配置文件示例
+#
+# 说明：
+# 1. 复制此文件为 config.yaml：cp config.yaml.example config.yaml
+# 2. 修改其中的连接参数为你的实际环境参数
+# 3. 运行测试时，使用 --config config.yaml 指定配置文件
+# 4. 命令行参数会覆盖配置文件中的设置，例如：
+#    python3 test_framework.py --config config.yaml --workload=delete_heavy --threads=10
+#
+# 参数优先级（从高到低）：
+#   1. 命令行参数（最高优先级）
+#   2. 环境变量（--variant 除外，必须指定）
+#   3. 配置文件
+#   4. 代码中的默认值（最低优先级）
+
+# ============================================================================
+# 数据库连接参数（必需）
+# ============================================================================
+# 这些参数不建议在命令行中暴露，使用配置文件隐藏敏感信息
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: "xxxx"
+  name: test_innodb
+
+# ============================================================================
+# 输出配置
+# ============================================================================
+# output_dir：测试产物输出目录（相对于项目根目录）
+# 自动创建按时间戳+参数命名的子目录，例如：
+#   20260105T143025_baseline_insert_t100_ops10000/
+
+output:
+  output_dir: out/runs
+
+# ============================================================================
+# 测试参数默认值（可通过命令行覆盖）
+# ============================================================================
+# 如果命令行中没有指定这些参数，就使用配置文件中的值
+
+test:
+# workload可选项
+# insert                纯插入，大量页分裂
+# delete_heavy          先插入 1.5x，再删除 60%
+# mixed                 50% INSERT + 30% SELECT + 20% UPDATE
+# mixed_with_delete     含 10% DELETE 的混合负载
+# range_insert          每个线程插入独立范围
+# churn                 滑动窗口插入删除
+  workload: insert
+
+  # threads：并发线程数
+  threads: 10
+
+  # operations：每个线程的操作数
+  operations: 10000
+
+  # duration：测试持续时间（秒，当前未使用）
+  duration: 60
+
+# ============================================================================
+# 使用示例
+# ============================================================================
+#
+# 1. 基础用法（使用配置文件的所有参数）：
+#    python3 test_framework.py --variant=baseline --config config.yaml
+#    → 使用 insert workload, 10 threads, 10000 ops，连接到 127.0.0.1:3306
+#
+# 2. 覆盖 workload（其他参数使用配置文件）：
+#    python3 test_framework.py --variant=baseline --config config.yaml --workload=delete_heavy
+#    → 使用 delete_heavy workload, 10 threads, 10000 ops
+#
+# 3. 覆盖多个参数：
+#    python3 test_framework.py --variant=optimized --config config.yaml \
+#      --workload=mixed_with_delete --threads=20 --operations=5000
+#    → 使用 mixed_with_delete workload, 20 threads, 5000 ops
+#
+# 4. 不使用配置文件（完全通过命令行，不推荐，暴露密码）：
+#    python3 test_framework.py --variant=baseline --workload=insert \
+#      --host=127.0.0.1 --port=3306 --user=root --password=0333 \
+#      --threads=100 --operations=10000 --output_dir=out/runs

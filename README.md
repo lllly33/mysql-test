@@ -148,7 +148,7 @@ python3 test_framework.py \
   --host=127.0.0.1 \
   --port=3306 \
   --user=root \
-  --password=0333 \
+  --password=密码 \
   --output_dir=out/runs
 ```
 
@@ -234,7 +234,7 @@ python3 test_framework.py \
   --host=127.0.0.1 \
   --port=3306 \
   --user=root \
-  --password=0333 \
+  --password=密码 \
   --output_dir=out/runs
 ```
 
@@ -788,7 +788,7 @@ python3 metrics_collector.py \
   --host=127.0.0.1 \
   --port=3306 \
   --user=root \
-  --password=0333 \
+  --password=密码 \
   --output=metrics.csv
 ```
 
@@ -1168,7 +1168,7 @@ ps aux | grep mysqld
 netstat -tlnp | grep 3306
 
 # 测试连接
-mysql -h127.0.0.1 -P3306 -uroot -p0333 -e "SELECT 1"
+mysql -h127.0.0.1 -P3306 -uroot -p密码 -e "SELECT 1"
 ```
 
 ---

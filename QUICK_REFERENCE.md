@@ -7,7 +7,7 @@ cd /usr/local/mysql-8.0.34/tests
 
 # 第一次使用（准备配置）
 cp config.yaml.example config.yaml
-vim config.yaml  # 改一下密码
+vim config.yaml  # 改一下配置
 
 # 测试基准版本
 python3 test_framework.py --variant=baseline --config config.yaml
@@ -15,7 +15,7 @@ python3 test_framework.py --variant=baseline --config config.yaml
 # 测试优化版本（参数相同）
 python3 test_framework.py --variant=optimized --config config.yaml
 
-# 生成对比报告
+# 生成对比报告 --- 取最近两次的
 python3 compare.py \
   --baseline "$(ls -dt out/runs/* | head -n 2 | tail -n 1)/result.csv" \
   --optimized "$(ls -dt out/runs/* | head -n 1)/result.csv" \

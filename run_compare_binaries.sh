@@ -9,7 +9,7 @@ Usage:
   bash run_compare_binaries.sh \
     --baseline-mysqld  /path/to/baseline/mysqld \
     --modified-mysqld  /path/to/modified/mysqld \
-    --password 0333 \
+    --password 密码 \
     [--baseline-basedir /usr/local/mysql] \
     [--modified-basedir /usr/local/mysql] \
     [--datadir /rds/mysql/data] \

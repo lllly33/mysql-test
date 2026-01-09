@@ -4595,6 +4595,9 @@ static bool btr_can_merge_with_page(
   ulint max_ins_size;
   buf_block_t *mblock;
   page_t *mpage;
+  ulint sibling_data_size;  /* Phase 0: 兄弟页数据大小 */
+  ulint page_total_size;     /* Phase 0: 页总大小 */
+  ulint merged_data_size;    /* Phase 0: 合并后数据大小 */
   DBUG_TRACE;
 
   if (page_no == FIL_NULL) {
@@ -4618,6 +4621,23 @@ static bool btr_can_merge_with_page(
   max_ins_size_reorg = page_get_max_insert_size_after_reorganize(mpage, n_recs);
 
   if (data_size > max_ins_size_reorg) {
+    goto error;
+  }
+
+  /* Phase 0 优化：跳过低收益合并 */
+  
+  /* 条件1：兄弟页利用率太低(<30%)，合并后仍很空，收益低 */
+  sibling_data_size = page_get_data_size(mpage);
+  page_total_size = page_size.physical();
+  if (sibling_data_size < page_total_size * 3 / 10) {
+    /* 兄弟页利用率 < 30%，合并收益低，跳过 */
+    goto error;
+  }
+
+  /* 条件2：合并后太满(>85%)，下次插入很快会再分裂，跳过 */
+  merged_data_size = data_size + sibling_data_size;
+  if (merged_data_size > page_total_size * 85 / 100) {
+    /* 合并后利用率 > 85%，容易再分裂，跳过 */
     goto error;
   }
 

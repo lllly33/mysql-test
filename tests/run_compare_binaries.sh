@@ -7,9 +7,24 @@ One-shot baseline vs modified binary comparison.
 
 Usage:
   bash run_compare_binaries.sh \
-    --baseline-mysqld  /path/to/baseline/mysqld \
-    --modified-mysqld  /path/to/modified/mysqld \
-    --password 0333 \
+    [--password 0333] \
+    [--config /usr/local/mysql-8.0.34/tests/config.yaml] \
+    [--workload mixed_with_delete] \
+    [--threads 10] \
+    [--operations 300000]
+
+Default binaries:
+  Baseline:  /usr/local/mysql-8.0.34/binaries/mysqld.baseline
+  Modified:  /usr/local/mysql-8.0.34/build_debug/runtime_output_directory/mysqld
+
+To override binaries:
+  bash run_compare_binaries.sh \
+    --baseline-mysqld /path/to/baseline/mysqld \
+    --modified-mysqld /path/to/modified/mysqld \
+    --password 0333
+
+Optional parameters:
+  [--config /path/to/config.yaml] \
     [--baseline-basedir /usr/local/mysql] \
     [--modified-basedir /usr/local/mysql] \
     [--datadir /rds/mysql/data] \
@@ -17,9 +32,6 @@ Usage:
     [--port 3306] \
     [--host 127.0.0.1] \
     [--user root] \
-    [--workload insert] \
-    [--threads 10] \
-    [--operations 1000] \
     [--runs-dir out/runs] \
     [--reports-dir out/reports]
 
@@ -37,8 +49,8 @@ Important notes:
 EOF
 }
 
-BASELINE_MYSQLD=
-MODIFIED_MYSQLD=
+BASELINE_MYSQLD=/usr/local/mysql-8.0.34/binaries/mysqld.baseline
+MODIFIED_MYSQLD=/usr/local/mysql-8.0.34/build_debug/runtime_output_directory/mysqld
 BASELINE_BASEDIR=/usr/local/mysql
 MODIFIED_BASEDIR=/usr/local/mysql
 DATADIR=/rds/mysql/data
@@ -46,12 +58,13 @@ SOCKET=/rds/mysql/tmp/mysql.sock
 PORT=3306
 HOST=127.0.0.1
 USER=root
-PASSWORD=
+PASSWORD=0333
 WORKLOAD=insert
 THREADS=10
 OPERATIONS=1000
 RUNS_DIR=out/runs
 REPORTS_DIR=out/reports
+CONFIG_FILE=
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --host) HOST="$2"; shift 2;;
     --user) USER="$2"; shift 2;;
     --password) PASSWORD="$2"; shift 2;;
+    --config) CONFIG_FILE="$2"; shift 2;;
     --workload) WORKLOAD="$2"; shift 2;;
     --threads) THREADS="$2"; shift 2;;
     --operations) OPERATIONS="$2"; shift 2;;
@@ -75,18 +89,31 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$BASELINE_MYSQLD" || -z "$MODIFIED_MYSQLD" || -z "$PASSWORD" ]]; then
-  echo "[ERROR] Missing required args."
+ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+TESTS_DIR="$ROOT_DIR/tests"
+
+if [[ -z "$CONFIG_FILE" ]]; then
+  if [[ -f "$TESTS_DIR/config.yaml" ]]; then
+    CONFIG_FILE="$TESTS_DIR/config.yaml"
+  fi
+fi
+
+if [[ -z "$PASSWORD" ]]; then
+  echo "[ERROR] Missing required args: --password"
   usage
   exit 2
 fi
 
-for bin in "$BASELINE_MYSQLD" "$MODIFIED_MYSQLD"; do
-  if [[ ! -x "$bin" ]]; then
-    echo "[ERROR] mysqld not executable: $bin"
-    exit 2
-  fi
-done
+# 检查默认的 mysqld 路径是否存在
+if [[ ! -x "$BASELINE_MYSQLD" ]]; then
+  echo "[ERROR] Baseline mysqld not found or not executable: $BASELINE_MYSQLD"
+  exit 2
+fi
+
+if [[ ! -x "$MODIFIED_MYSQLD" ]]; then
+  echo "[ERROR] Modified mysqld not found or not executable: $MODIFIED_MYSQLD"
+  exit 2
+fi
 
 MYSQL_BIN=/usr/local/mysql/bin/mysql
 MYSQLADMIN_BIN=/usr/local/mysql/bin/mysqladmin
@@ -96,8 +123,10 @@ if [[ ! -x "$MYSQL_BIN" || ! -x "$MYSQLADMIN_BIN" ]]; then
   exit 2
 fi
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TESTS_DIR="$ROOT_DIR/tests"
+if [[ -n "$CONFIG_FILE" && ! -f "$CONFIG_FILE" ]]; then
+  echo "[ERROR] config file not found: $CONFIG_FILE"
+  exit 2
+fi
 mkdir -p "$TESTS_DIR/$RUNS_DIR" "$TESTS_DIR/$REPORTS_DIR"
 
 PID_FILE="$(dirname "$SOCKET")/mysqld_${PORT}.pid"
@@ -141,6 +170,26 @@ start_server() {
   for _ in $(seq 1 80); do
     if [[ -S "$SOCKET" ]] && MYSQL_PWD="$PASSWORD" "$MYSQL_BIN" --no-defaults \
         --protocol=socket --socket="$SOCKET" -u"$USER" -e "SELECT 1" >/dev/null 2>&1; then
+      # Self-check: confirm which mysqld is actually running.
+      if [[ -f "$PID_FILE" ]]; then
+        pid=$(cat "$PID_FILE" 2>/dev/null || true)
+      else
+        pid=""
+      fi
+
+      echo "[INFO] mysqld bin (requested): $mysqld_bin"
+      "$mysqld_bin" --version 2>/dev/null | head -n 1 || true
+      if [[ -n "$pid" ]]; then
+        echo "[INFO] mysqld pid: $pid"
+        if [[ -e "/proc/$pid/exe" ]]; then
+          echo "[INFO] mysqld exe (actual): $(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+        fi
+      fi
+
+      MYSQL_PWD="$PASSWORD" "$MYSQL_BIN" --no-defaults \
+        --protocol=socket --socket="$SOCKET" -u"$USER" -Nse \
+        "SELECT CONCAT('@@version=',@@version,' @@version_comment=',@@version_comment,' @@basedir=',@@basedir,' @@datadir=',@@datadir)" \
+        2>/dev/null | sed 's/^/[INFO] /' || true
       return 0
     fi
     sleep 0.25
@@ -155,6 +204,7 @@ run_once() {
   echo "[INFO] Running: variant=$variant workload=$WORKLOAD threads=$THREADS ops=$OPERATIONS"
   (cd "$TESTS_DIR" && python3 test_framework.py \
     --variant="$variant" \
+    ${CONFIG_FILE:+--config="$CONFIG_FILE"} \
     --workload="$WORKLOAD" \
     --threads="$THREADS" \
     --operations="$OPERATIONS" \

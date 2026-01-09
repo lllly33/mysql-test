@@ -849,11 +849,22 @@ def main():
         config_keys = config_key.split('.')
         val = config_from_file
         for key in config_keys:
-            val = val.get(key, {}) if isinstance(val, dict) else None
-            if val is None:
+            if not isinstance(val, dict) or key not in val:
+                val = None
                 break
+            val = val[key]
+
         if val is not None:
-            return type_fn(val) if type_fn else val
+            if type_fn:
+                try:
+                    return type_fn(val)
+                except Exception:
+                    print(
+                        f"[WARN] 配置项 {config_key} 值类型异常: {val!r}，使用默认值 {default_value!r}",
+                        file=sys.stderr,
+                    )
+                    return default_value
+            return val
 
         return default_value
 

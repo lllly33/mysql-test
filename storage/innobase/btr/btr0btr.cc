@@ -4625,7 +4625,7 @@ static bool btr_can_merge_with_page(
   }
 
   /* Phase 0 优化：跳过低收益合并 */
-  
+
   /* 条件1：兄弟页利用率太低(<30%)，合并后仍很空，收益低 */
   sibling_data_size = page_get_data_size(mpage);
   page_total_size = page_size.physical();

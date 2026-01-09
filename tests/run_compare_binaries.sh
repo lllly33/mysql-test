@@ -127,6 +127,24 @@ if [[ -n "$CONFIG_FILE" && ! -f "$CONFIG_FILE" ]]; then
   echo "[ERROR] config file not found: $CONFIG_FILE"
   exit 2
 fi
+
+baseline_version=$("$BASELINE_MYSQLD" --version 2>/dev/null | head -n 1 || true)
+modified_version=$("$MODIFIED_MYSQLD" --version 2>/dev/null | head -n 1 || true)
+baseline_type=release
+modified_type=release
+if [[ "$baseline_version" == *"-debug"* ]]; then baseline_type=debug; fi
+if [[ "$modified_version" == *"-debug"* ]]; then modified_type=debug; fi
+if [[ "$baseline_type" != "$modified_type" ]]; then
+  echo "[WARN] Baseline/modified mysqld build types differ ($baseline_type vs $modified_type)." >&2
+  echo "[WARN] This will heavily skew TPS/latency; use same build type for fair perf comparisons." >&2
+  echo "[WARN] Baseline --version: $baseline_version" >&2
+  echo "[WARN] Modified --version: $modified_version" >&2
+  if [[ -x "$ROOT_DIR/build/runtime_output_directory/mysqld" ]]; then
+    echo "[WARN] Hint: to compare release vs release, try:" >&2
+    echo "[WARN]   --modified-mysqld $ROOT_DIR/build/runtime_output_directory/mysqld" >&2
+  fi
+fi
+
 mkdir -p "$TESTS_DIR/$RUNS_DIR" "$TESTS_DIR/$REPORTS_DIR"
 
 PID_FILE="$(dirname "$SOCKET")/mysqld_${PORT}.pid"
